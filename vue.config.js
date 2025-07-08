@@ -12,11 +12,11 @@ module.exports = defineConfig({
     },
   },
 
-  // 添加开发服务器代理配置
+  // 正确放置 proxy 配置
   devServer: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8082',
+        target: 'http://localhost:8085',
         changeOrigin: true,
         logLevel: 'debug',
         onProxyReq: (proxyReq, req, res) => {

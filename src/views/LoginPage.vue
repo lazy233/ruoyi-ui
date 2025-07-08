@@ -51,30 +51,16 @@
 
     const handleLogin = async () => {
         try {
-            console.log('发送登录数据:', form.value); // 添加日志
             const response = await login(form.value);
-            console.log('登录成功响应:', response); // 添加成功日志
-            
-            // 保存token到store
             if (response.data && response.data.token) {
                 userStore.setToken(response.data.token);
-            }
-            
-
             router.push('/console');
-        } catch (err) {
-            console.error('登录错误详情:', err); // 添加详细错误日志
-            if (err.response) {
-                console.error('响应数据:', err.response.data);
-                console.error('响应状态:', err.response.status);
-                alert(`登录失败: ${err.response.data.error || err.response.data.message || '用户名或密码错误'}`);
-            } else if (err.request) {
-                console.error('请求错误:', err.request);
-                alert('登录失败，无法连接到服务器');
             } else {
-                console.error('其他错误:', err.message);
-                alert('登录失败，请检查网络连接');
+                alert('登录失败：未获取到token');
             }
+        } catch (err) {
+            alert('登录失败：无法连接服务器');
+            // 不要跳转
         }
     };
 </script>

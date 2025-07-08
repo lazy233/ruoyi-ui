@@ -25,6 +25,7 @@
                     <th>ID</th>
                     <th>用户名</th>
                     <th>邮箱</th>
+                    <th>班级</th>
                     <th>创建时间</th>
                     <th>更新时间</th>
                     <th>状态</th>
@@ -36,6 +37,7 @@
                     <td>{{ user.userId }}</td>
                     <td>{{ user.username }}</td>
                     <td>{{ user.email }}</td>
+                    <td>{{ getClassName(user.classId) }}</td>
                     <td>{{ formatDate(user.createdAt) }}</td>
                     <td>{{ formatDate(user.updatedAt) }}</td>
                     <td>
@@ -102,6 +104,13 @@
                         <label>密码</label>
                         <input type="password" v-model="userForm.password" placeholder="请输入密码">
                     </div>
+                    <div class="form-group">
+                        <label>班级</label>
+                        <select v-model="userForm.classId">
+                            <option value="">请选择班级</option>
+                            <option v-for="option in classOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="dialog-footer">
                     <button class="cancel-btn" @click="showAddDialog = false">取消</button>
@@ -126,11 +135,15 @@ const searchKeyword = ref('');
 const showAddDialog = ref(false);
 const editingUser = ref(null);
 
+// 新增班级下拉选项数据
+const classOptions = ref([]);
+
 // 用户表单
 const userForm = reactive({
     username: '',
     email: '',
-    password: ''
+    password: '',
+    classId: ''
 });
 
 // 计算总页数
@@ -183,12 +196,28 @@ const handlePageChange = (page) => {
     fetchUserList();
 };
 
+// 获取班级列表
+const fetchClassOptions = async () => {
+    const res = await axios.post('/api/classes/list', { pageNum: 1, pageSize: 1000 });
+    classOptions.value = (res.data.records || []).map(item => ({
+        label: item.className,
+        value: item.classId
+    }));
+};
+
+// 获取班级名称
+const getClassName = (classId) => {
+    const found = classOptions.value.find(c => c.value === classId);
+    return found ? found.label : '-';
+};
+
 // 编辑用户
 const handleEdit = (user) => {
     editingUser.value = user;
     userForm.username = user.username;
     userForm.email = user.email;
     userForm.password = '123456';
+    userForm.classId = user.classId || '';
     showAddDialog.value = true;
 };
 
@@ -233,7 +262,8 @@ const handleSave = async () => {
             // 编辑用户
             response = await axios.put(`/api/users/updateUser/${editingUser.value.userId}`, {
                 username: userForm.username,
-                email: userForm.email
+                email: userForm.email,
+                classId: userForm.classId
             });
         } else {
             // 添加用户
@@ -263,6 +293,7 @@ const resetForm = () => {
     userForm.username = '';
     userForm.email = '';
     userForm.password = '';
+    userForm.classId = '';
     editingUser.value = null;
 };
 
@@ -282,6 +313,7 @@ const formatDate = (dateString) => {
 // 页面加载时获取数据
 onMounted(() => {
     fetchUserList();
+    fetchClassOptions();
 });
 </script>
 

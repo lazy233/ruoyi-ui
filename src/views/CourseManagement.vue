@@ -8,7 +8,7 @@
 
         <div class="search-bar">
             <input type="text" placeholder="搜索课程..." class="search-input" v-model="searchQuery">
-            <button class="search-btn">搜索</button>
+            <button class="search-btn" @click="handleSearch">搜索</button>
         </div>
 
         <div class="table-container">
@@ -26,11 +26,11 @@
                 </tr>
                 </thead>
                 <tbody>
-                <tr v-for="course in filteredCourses" :key="course.id">
-                    <td>{{ course.id }}</td>
+                <tr v-for="course in filteredCourses" :key="course.courseId">
+                    <td>{{ course.courseId }}</td>
                     <td>
                         <div class="course-info">
-                            <div class="course-title">{{ course.title }}</div>
+                            <div class="course-title">{{ course.courseName }}</div>
                             <div class="course-desc">{{ course.description }}</div>
                         </div>
                     </td>
@@ -46,7 +46,7 @@
                     <td>
                         <button class="edit-btn" @click="editCourse(course)">编辑</button>
                         <button class="view-btn" @click="viewCourse(course)">查看</button>
-                        <button class="delete-btn" @click="deleteCourse(course.id)">删除</button>
+                        <button class="delete-btn" @click="deleteCourse(course.courseId)">删除</button>
                     </td>
                 </tr>
                 </tbody>
@@ -54,9 +54,9 @@
         </div>
 
         <div class="pagination">
-            <button>上一页</button>
-            <span>1 / 3</span>
-            <button>下一页</button>
+            <button @click="handlePageChange(currentPage - 1)" :disabled="currentPage === 1">上一页</button>
+            <span>{{ currentPage }} / {{ totalPage }}</span>
+            <button @click="handlePageChange(currentPage + 1)" :disabled="currentPage === totalPage">下一页</button>
         </div>
 
         <!-- 添加/编辑课程对话框 -->
@@ -123,6 +123,7 @@
 <script setup>
 import { ref, reactive, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import axios from 'axios';
 
 const router = useRouter();
 
@@ -143,77 +144,116 @@ const courseForm = reactive({
     status: 'draft'
 });
 
-// 课程数据
-const courses = ref([
-    { 
-        id: 1, 
-        title: 'Vue.js 前端开发实战课程', 
-        description: '从零开始学习Vue.js，掌握现代前端开发技术',
-        teacher: '张老师',
-        category: '前端开发',
-        duration: '20小时',
-        studentCount: 1250,
-        status: 'published'
-    },
-    { 
-        id: 2, 
-        title: 'React 全栈开发', 
-        description: '学习React生态系统，构建完整的Web应用',
-        teacher: '李老师',
-        category: '前端开发',
-        duration: '25小时',
-        studentCount: 980,
-        status: 'published'
-    },
-    { 
-        id: 3, 
-        title: 'Node.js 后端开发', 
-        description: '掌握Node.js服务器端开发技术',
-        teacher: '王老师',
-        category: '后端开发',
-        duration: '18小时',
-        studentCount: 756,
-        status: 'draft'
-    },
-    { 
-        id: 4, 
-        title: 'Python 数据分析', 
-        description: '使用Python进行数据分析和可视化',
-        teacher: '赵老师',
-        category: '数据科学',
-        duration: '30小时',
-        studentCount: 1200,
-        status: 'published'
-    }
-]);
+// 分页相关
+const currentPage = ref(1);
+const pageSize = ref(10);
+const total = ref(0);
 
-// 过滤课程
-const filteredCourses = computed(() => {
-    if (!searchQuery.value) return courses.value;
-    return courses.value.filter(course => 
-        course.title.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-        course.teacher.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-        course.category.toLowerCase().includes(searchQuery.value.toLowerCase())
-    );
-});
+// 课程数据
+const courses = ref([]);
+
+// 获取课程列表
+const fetchCourseList = async () => {
+    try {
+        const response = await axios.post('/api/courses/list', {
+            pageNum: currentPage.value,
+            pageSize: pageSize.value,
+            courseName: searchQuery.value
+        });
+        if (response.data) {
+            courses.value = response.data.records || [];
+            total.value = response.data.total || 0;
+        }
+    } catch (error) {
+        console.error('获取课程列表失败', error);
+        courses.value = [];
+        total.value = 0;
+    }
+};
+
+// 搜索
+const handleSearch = () => {
+    currentPage.value = 1;
+    fetchCourseList();
+};
+
+// 分页
+const handlePageChange = (page) => {
+    currentPage.value = page;
+    fetchCourseList();
+};
+
+// 新增/编辑课程
+const saveCourse = async () => {
+    if (!courseForm.title || !courseForm.teacher || !courseForm.category) {
+        alert('请填写完整信息');
+        return;
+    }
+    try {
+        let response;
+        if (editingCourse.value) {
+            // 编辑课程
+            response = await axios.put(`/api/courses/updateCourse/${editingCourse.value.courseId}`, {
+                courseName: courseForm.title,
+                description: courseForm.description,
+                teacher: courseForm.teacher,
+                category: courseForm.category,
+                duration: courseForm.duration,
+                status: courseForm.status
+            });
+        } else {
+            // 新增课程
+            response = await axios.post('/api/courses/addCourse', {
+                courseName: courseForm.title,
+                description: courseForm.description,
+                teacher: courseForm.teacher,
+                category: courseForm.category,
+                duration: courseForm.duration,
+                status: courseForm.status
+            });
+        }
+        if (response.data && response.data.success) {
+            alert(editingCourse.value ? '编辑成功' : '创建成功');
+            showAddDialog.value = false;
+            closeDialog();
+            fetchCourseList();
+        } else {
+            alert('操作失败: ' + (response.data?.message || '未知错误'));
+        }
+    } catch (error) {
+        console.error('保存课程出错', error);
+        alert('操作失败');
+    }
+};
+
+// 删除课程
+const deleteCourse = async (id) => {
+    if (confirm('确定要删除这个课程吗？')) {
+        try {
+            const response = await axios.delete(`/api/courses/deleteCourse/${id}`);
+            if (response.status === 200 || response.status === 204) {
+                alert('删除成功');
+                fetchCourseList();
+            } else {
+                alert('删除失败');
+            }
+        } catch (error) {
+            console.error('删除课程出错', error);
+            alert('删除失败');
+        }
+    }
+};
 
 // 编辑课程
 const editCourse = (course) => {
     editingCourse.value = course;
-    Object.assign(courseForm, course);
+    courseForm.title = course.courseName;
+    courseForm.description = course.description;
+    courseForm.teacher = course.teacher;
+    courseForm.category = course.category;
+    courseForm.duration = course.duration;
+    courseForm.status = course.status;
     showAddDialog.value = true;
-};
-
-// 查看课程
-const viewCourse = (course) => {
-    router.push(`/course/${course.id}`);
-};
-
-// 删除课程
-const deleteCourse = (id) => {
-    if (confirm('确定要删除这个课程吗？')) {
-        courses.value = courses.value.filter(course => course.id !== id);
-    }
 };
 
 // 关闭对话框
@@ -230,28 +270,23 @@ const closeDialog = () => {
     });
 };
 
-// 保存课程
-const saveCourse = () => {
-    if (!courseForm.title || !courseForm.teacher || !courseForm.category) {
-        alert('请填写完整信息');
-        return;
-    }
-
-    if (editingCourse.value) {
-        // 编辑现有课程
-        Object.assign(editingCourse.value, courseForm);
-    } else {
-        // 创建新课程
-        const newCourse = {
-            id: Math.max(...courses.value.map(c => c.id)) + 1,
-            ...courseForm,
-            studentCount: 0
-        };
-        courses.value.push(newCourse);
-    }
-
-    closeDialog();
+// 查看课程
+const viewCourse = (course) => {
+    router.push(`/course/${course.courseId}`);
 };
+
+// 过滤课程
+const filteredCourses = computed(() => {
+    if (!searchQuery.value) return courses.value;
+    return courses.value.filter(course => 
+        course.courseName.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+        course.teacher.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+        course.category.toLowerCase().includes(searchQuery.value.toLowerCase())
+    );
+});
+
+// 页面加载时获取数据
+fetchCourseList();
 </script>
 
 <style scoped>

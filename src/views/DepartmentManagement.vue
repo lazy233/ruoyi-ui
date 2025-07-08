@@ -26,6 +26,7 @@
                     <th>班级名称</th>
                     <th>学生人数</th>
                     <th>教室编号</th>
+                    <th>班级</th>
                     <th>操作</th>
                 </tr>
                 </thead>
@@ -35,6 +36,7 @@
                     <td>{{ classItem.className }}</td>
                     <td>{{ classItem.studentCount }}</td>
                     <td>{{ classItem.classroom || '-' }}</td>
+                    <td>{{ getClassName(classItem.classId) }}</td>
                     <td>
                         <button class="edit-btn" @click="handleEdit(classItem)">编辑</button>
                         <button class="delete-btn" @click="handleDelete(classItem)">删除</button>
@@ -109,6 +111,15 @@
                             maxlength="20"
                         >
                     </div>
+                    <div class="form-group">
+                        <label>班级</label>
+                        <select v-model="userForm.classId">
+                            <option value="">请选择班级</option>
+                            <option v-for="item in classOptions" :key="item.value" :value="item.value">
+                                {{ item.label }}
+                            </option>
+                        </select>
+                    </div>
                 </div>
                 <div class="dialog-footer">
                     <button class="cancel-btn" @click="showAddDialog = false">取消</button>
@@ -132,12 +143,21 @@ const total = ref(0);
 const searchKeyword = ref('');
 const showAddDialog = ref(false);
 const editingClass = ref(null);
+const classOptions = ref([]);
+const userForm = reactive({
+    username: '',
+    email: '',
+    password: '',
+    classId: ''
+});
+const editingUser = ref(null);
 
 // 班级表单
 const classForm = reactive({
     className: '',
     studentCount: 0,
-    classroom: ''
+    classroom: '',
+    classId: ''
 });
 
 // 计算总页数
@@ -282,79 +302,98 @@ const resetForm = () => {
     classForm.studentCount = 0;
     classForm.classroom = '';
     editingClass.value = null;
+    userForm.username = '';
+    userForm.email = '';
+    userForm.password = '';
+    userForm.classId = '';
+    editingUser.value = null;
 };
 
 // 页面加载时获取数据
 onMounted(() => {
     fetchClassList();
+    fetchClassOptions();
 });
+
+const fetchClassOptions = async () => {
+    const res = await axios.post('/api/classes/list', { pageNum: 1, pageSize: 1000 });
+    classOptions.value = (res.data.records || []).map(item => ({
+        label: item.className,
+        value: item.classId
+    }));
+};
+
+const getClassName = (classId) => {
+    const found = classOptions.value.find(c => c.value === classId);
+    return found ? found.label : '-';
+};
 </script>
 
 <style scoped>
-.management-page {
-    background: white;
-    border-radius: 10px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-    padding: 25px;
-}
+    .management-page {
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+        padding: 25px;
+    }
 
-.header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 25px;
-}
+    .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 25px;
+    }
 
-.header h1 {
-    margin: 0;
-    font-size: 1.8rem;
-    color: #1e293b;
-}
+    .header h1 {
+        margin: 0;
+        font-size: 1.8rem;
+        color: #1e293b;
+    }
 
-.add-btn {
-    background: #3b82f6;
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 1rem;
-    transition: background 0.3s;
-}
+    .add-btn {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 1rem;
+        transition: background 0.3s;
+    }
 
-.add-btn:hover {
-    background: #2563eb;
-}
+    .add-btn:hover {
+        background: #2563eb;
+    }
 
-.search-bar {
-    display: flex;
-    margin-bottom: 25px;
+    .search-bar {
+        display: flex;
+        margin-bottom: 25px;
     gap: 10px;
-}
+    }
 
-.search-input {
+    .search-input {
     flex: 1;
     padding: 12px 15px;
     border: 1px solid #d1d5db;
-    border-radius: 6px;
+        border-radius: 6px;
     font-size: 1rem;
-}
+    }
 
 .search-btn, .reset-btn {
     padding: 12px 20px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 1rem;
-    transition: background 0.3s;
-}
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 1rem;
+        transition: background 0.3s;
+    }
 
 .search-btn {
     background: #4b5563;
     color: white;
 }
 
-.search-btn:hover {
+    .search-btn:hover {
     background: #374151;
 }
 
@@ -366,63 +405,63 @@ onMounted(() => {
 
 .reset-btn:hover {
     background: #e5e7eb;
-}
+    }
 
-.table-container {
+    .table-container {
     overflow-x: auto;
     position: relative;
     min-height: 200px;
-}
+    }
 
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
 
 .data-table th {
     background: #f3f4f6;
     padding: 15px;
-    text-align: left;
+        text-align: left;
     font-weight: 600;
     color: #374151;
     border-bottom: 2px solid #e5e7eb;
-}
+    }
 
 .data-table td {
     padding: 15px;
     border-bottom: 1px solid #e5e7eb;
     color: #4b5563;
-}
+    }
 
 .data-table tr:hover {
-    background: #f9fafb;
-}
+        background: #f9fafb;
+    }
 
-.edit-btn, .delete-btn {
-    padding: 6px 12px;
+    .edit-btn, .delete-btn {
+        padding: 6px 12px;
     margin-right: 8px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.9rem;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9rem;
     border: none;
     transition: background 0.3s;
-}
+    }
 
-.edit-btn {
-    background: #e0f2fe;
-    color: #0369a1;
-    border: 1px solid #bae6fd;
-}
+    .edit-btn {
+        background: #e0f2fe;
+        color: #0369a1;
+        border: 1px solid #bae6fd;
+    }
 
 .edit-btn:hover {
     background: #bae6fd;
 }
 
-.delete-btn {
-    background: #fee2e2;
-    color: #b91c1c;
-    border: 1px solid #fecaca;
-}
+    .delete-btn {
+        background: #fee2e2;
+        color: #b91c1c;
+        border: 1px solid #fecaca;
+    }
 
 .delete-btn:hover {
     background: #fecaca;
