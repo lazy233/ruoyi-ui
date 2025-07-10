@@ -4,6 +4,7 @@ import { useUserStore } from '@/store/user';
 import Login from '@/views/LoginPage.vue';
 import Register from '@/views/RegisterPage.vue';
 import ConsoleLayout from '@/layouts/ConsoleLayout.vue';
+import HomePage from '@/views/HomePage.vue';
 import UserManagement from '@/views/UserManagement.vue';
 import DepartmentManagement from '@/views/DepartmentManagement.vue';
 import RolesManagement from '@/views/RolesManagement.vue';
@@ -27,6 +28,11 @@ const routes = [
         meta: { requiresAuth: true },
         children: [
             {
+                path: '',
+                name: 'HomePage',
+                component: HomePage
+            },
+            {
                 path: 'users',
                 name: 'UserManagement',
                 component: UserManagement
@@ -49,11 +55,6 @@ const routes = [
                 path: 'settings',
                 name: 'SystemManagement',
                 component: SystemManagement
-            },
-            // 默认重定向到用户管理
-            {
-                path: '',
-                redirect: { name: 'UserManagement' }
             }
         ]
     },

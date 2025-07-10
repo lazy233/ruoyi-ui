@@ -20,8 +20,31 @@
             </div>
         </div>
 
+        <!-- 加载状态 -->
+        <div v-if="loading" class="loading-container">
+            <div class="loading-spinner">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2V6M12 18V22M4.93 4.93L7.76 7.76M16.24 16.24L19.07 19.07M2 12H6M18 12H22M4.93 19.07L7.76 16.24M16.24 7.76L19.07 4.93" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>
+            <p>加载课程信息中...</p>
+        </div>
+
+        <!-- 错误状态 -->
+        <div v-else-if="error" class="error-container">
+            <div class="error-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M15 9L9 15M9 9L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>
+            <h3>加载失败</h3>
+            <p>{{ error }}</p>
+            <button class="btn btn-primary" @click="goBack">返回课程列表</button>
+        </div>
+
         <!-- 主要内容区域 -->
-        <div class="main-content">
+        <div v-else class="main-content">
             <!-- 左侧：视频播放区域 -->
             <div class="video-section">
                 <div class="video-player">
@@ -125,28 +148,136 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, reactive, computed, onMounted } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
+import axios from 'axios';
 
 const router = useRouter();
+const route = useRoute();
 
 // 返回控制台
 const goBack = () => {
     console.log('Navigating back to console from course learning');
-    router.push('/console');
+    router.push('/console/courses');
 };
 
 // 课程数据
 const course = reactive({
-    id: 1,
-    title: 'Vue.js 前端开发实战课程',
-    description: '从零开始学习Vue.js，掌握现代前端开发技术，构建响应式用户界面',
-    teacher: '张老师',
-    duration: '20小时',
-    studentCount: 1250,
-    rating: 4.8,
-    progress: 35
+    id: null,
+    title: '',
+    description: '',
+    teacher: '',
+    duration: '',
+    studentCount: 0,
+    rating: 0,
+    progress: 0,
+    category: '',
+    status: ''
 });
+
+// 加载状态
+const loading = ref(true);
+const error = ref(null);
+
+// 模拟课程数据库
+const mockCourses = {
+    1: {
+        id: 1,
+        courseName: 'Vue.js 前端开发实战课程',
+        description: '从零开始学习Vue.js，掌握现代前端开发技术，构建响应式用户界面',
+        teacher: '张老师',
+        duration: '20小时',
+        studentCount: 1250,
+        rating: 4.8,
+        progress: 35,
+        category: '前端开发',
+        status: 'published'
+    },
+    2: {
+        id: 2,
+        courseName: 'React 进阶开发课程',
+        description: '深入学习React生态系统，包括Hooks、Context、Redux等高级特性',
+        teacher: '李老师',
+        duration: '25小时',
+        studentCount: 980,
+        rating: 4.9,
+        progress: 0,
+        category: '前端开发',
+        status: 'published'
+    },
+    3: {
+        id: 3,
+        courseName: 'Node.js 后端开发',
+        description: '全面掌握Node.js后端开发，包括Express、数据库操作、API设计等',
+        teacher: '王老师',
+        duration: '30小时',
+        studentCount: 756,
+        rating: 4.7,
+        progress: 0,
+        category: '后端开发',
+        status: 'published'
+    },
+    4: {
+        id: 4,
+        courseName: 'Python 数据分析',
+        description: '使用Python进行数据分析，包括Pandas、NumPy、Matplotlib等工具',
+        teacher: '陈老师',
+        duration: '18小时',
+        studentCount: 643,
+        rating: 4.6,
+        progress: 0,
+        category: '数据科学',
+        status: 'published'
+    }
+};
+
+// 获取课程信息
+const fetchCourseInfo = async (courseId) => {
+    loading.value = true;
+    error.value = null;
+    
+    try {
+        // 尝试从API获取课程信息
+        const response = await axios.get(`/api/courses/getCourse/${courseId}`);
+        if (response.data && response.data.success) {
+            const courseData = response.data.data;
+            Object.assign(course, {
+                id: courseData.courseId,
+                title: courseData.courseName,
+                description: courseData.description,
+                teacher: courseData.teacher,
+                duration: courseData.duration,
+                studentCount: courseData.studentCount || 0,
+                rating: courseData.rating || 0,
+                progress: courseData.progress || 0,
+                category: courseData.category,
+                status: courseData.status
+            });
+        }
+    } catch (apiError) {
+        console.log('API调用失败，使用模拟数据:', apiError);
+        // 如果API调用失败，使用模拟数据
+        const mockCourse = mockCourses[courseId];
+        if (mockCourse) {
+            Object.assign(course, {
+                id: mockCourse.id,
+                title: mockCourse.courseName,
+                description: mockCourse.description,
+                teacher: mockCourse.teacher,
+                duration: mockCourse.duration,
+                studentCount: mockCourse.studentCount,
+                rating: mockCourse.rating,
+                progress: mockCourse.progress,
+                category: mockCourse.category,
+                status: mockCourse.status
+            });
+        } else {
+            error.value = '课程不存在';
+        }
+    } finally {
+        loading.value = false;
+    }
+};
 
 // 当前章节
 const currentChapter = ref({
@@ -206,6 +337,17 @@ const selectChapter = (chapter) => {
     // 这里可以添加视频切换逻辑
     console.log('切换到章节:', chapter.title);
 };
+
+// 组件挂载时获取课程信息
+onMounted(() => {
+    const courseId = route.params.id;
+    if (courseId) {
+        fetchCourseInfo(courseId);
+    } else {
+        error.value = '课程ID无效';
+        loading.value = false;
+    }
+});
 </script>
 
 <style scoped>
@@ -285,6 +427,92 @@ const selectChapter = (chapter) => {
 .meta-item {
     color: #64748b;
     font-size: 0.9rem;
+}
+
+/* 加载和错误状态 */
+.loading-container,
+.error-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 20px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.loading-spinner {
+    width: 48px;
+    height: 48px;
+    color: #3b82f6;
+    margin-bottom: 16px;
+}
+
+.loading-spinner svg {
+    width: 100%;
+    height: 100%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.error-icon {
+    width: 48px;
+    height: 48px;
+    color: #ef4444;
+    margin-bottom: 16px;
+}
+
+.error-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.loading-container p,
+.error-container p {
+    color: #64748b;
+    font-size: 16px;
+    margin: 0 0 16px 0;
+}
+
+.error-container h3 {
+    color: #1e293b;
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 8px 0;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+    text-decoration: none;
+}
+
+.btn-primary {
+    background: #3b82f6;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #2563eb;
 }
 
 /* 主要内容区域 */
