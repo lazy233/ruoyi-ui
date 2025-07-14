@@ -18,7 +18,7 @@ const routes = [
     { path: '/login', component: Login },
     { path: '/register', component: Register },
     { 
-        path: '/course/:id', 
+        path: '/course-learning/:id', 
         component: CourseLearning,
         meta: { requiresAuth: true }  // 添加权限验证
     },

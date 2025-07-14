@@ -10,12 +10,12 @@
                 </button>
             </div>
             <div class="nav-center">
-                <h2>{{ course.title }}</h2>
+                <h2>{{ course.courseName }}</h2>
             </div>
             <div class="nav-right">
                 <div class="course-meta">
                     <span class="meta-item">👨‍🏫 {{ course.teacher }}</span>
-                    <span class="meta-item">⭐ {{ course.rating }}</span>
+                    <span class="meta-item">📅 {{ formatDate(course.createTime) }}</span>
                 </div>
             </div>
         </div>
@@ -48,16 +48,25 @@
             <!-- 左侧：视频播放区域 -->
             <div class="video-section">
                 <div class="video-player">
-                    <div class="video-placeholder">
+                    <div class="video-placeholder" v-if="!currentVideo">
                         <div class="play-button">▶️</div>
-                        <p>点击播放视频</p>
+                        <p>选择章节开始学习</p>
+                    </div>
+                    <div class="video-container" v-else>
+                        <video v-if="currentVideo.videoUrl" :src="currentVideo.videoUrl" controls class="video-element">
+                            您的浏览器不支持视频播放
+                        </video>
+                        <div v-else class="video-placeholder">
+                            <div class="play-button">▶️</div>
+                            <p>{{ currentVideo.videoTitle }}</p>
+                        </div>
                     </div>
                 </div>
                 
                 <!-- 当前章节信息 -->
-                <div class="current-chapter">
-                    <h3>{{ currentChapter.title }}</h3>
-                    <p>{{ currentChapter.description }}</p>
+                <div class="current-chapter" v-if="currentChapter">
+                    <h3>{{ currentChapter.chapterTitle }}</h3>
+                    <p v-if="currentVideo">{{ currentVideo.videoTitle }}</p>
                     <div class="chapter-actions">
                         <button class="btn btn-primary">✅ 标记完成</button>
                         <button class="btn btn-secondary">📝 笔记</button>
@@ -67,25 +76,24 @@
             </div>
 
             <!-- 右侧：学习进度和章节列表 -->
-            <div class="side-panel">
-                <!-- 学习进度 -->
-                <div class="progress-card">
-                    <h4>学习进度</h4>
-                    <div class="progress-info">
-                        <div class="progress-circle">
-                            <div class="progress-text">
-                                <span class="percentage">{{ course.progress }}%</span>
-                                <span class="label">完成度</span>
-                            </div>
-                        </div>
-                        <div class="progress-stats">
+            <div class="sidebar">
+                <!-- 课程信息卡片 -->
+                <div class="course-info-card">
+                    <div class="course-cover">
+                        <img v-if="course.coverUrl" :src="course.coverUrl" :alt="course.courseName">
+                        <div v-else class="default-cover">📚</div>
+                    </div>
+                    <div class="course-details">
+                        <h3>{{ course.courseName }}</h3>
+                        <p>{{ course.description }}</p>
+                        <div class="course-stats">
                             <div class="stat-item">
-                                <span class="stat-number">{{ completedChapters }}</span>
-                                <span class="stat-label">已完成</span>
+                                <span class="stat-label">状态</span>
+                                <span class="stat-value">{{ getStatusText(course.status) }}</span>
                             </div>
                             <div class="stat-item">
-                                <span class="stat-number">{{ chapters.length - completedChapters }}</span>
-                                <span class="stat-label">待学习</span>
+                                <span class="stat-label">章节数</span>
+                                <span class="stat-value">{{ chapters.length }}章</span>
                             </div>
                         </div>
                     </div>
@@ -101,23 +109,42 @@
                     <div class="chapter-list">
                         <div 
                             v-for="(chapter, index) in chapters" 
-                            :key="chapter.id"
+                            :key="chapter.chapterId"
                             :class="['chapter-item', { 
-                                'active': currentChapter.id === chapter.id,
-                                'completed': chapter.completed 
+                                'active': currentChapter && currentChapter.chapterId === chapter.chapterId,
+                                'expanded': expandedChapters.includes(chapter.chapterId)
                             }]"
-                            @click="selectChapter(chapter)"
                         >
-                            <div class="chapter-info">
-                                <div class="chapter-number">{{ index + 1 }}</div>
-                                <div class="chapter-content">
-                                    <h5>{{ chapter.title }}</h5>
-                                    <p>{{ chapter.duration }}</p>
+                            <div class="chapter-header" @click="toggleChapter(chapter)">
+                                <div class="chapter-info">
+                                    <div class="chapter-number">{{ index + 1 }}</div>
+                                    <div class="chapter-content">
+                                        <h5>{{ chapter.chapterTitle }}</h5>
+                                        <p>{{ chapter.videos.length }}个视频</p>
+                                    </div>
+                                </div>
+                                <div class="chapter-toggle">
+                                    <span v-if="expandedChapters.includes(chapter.chapterId)">▼</span>
+                                    <span v-else>▶</span>
                                 </div>
                             </div>
-                            <div class="chapter-status">
-                                <span v-if="chapter.completed" class="status-completed">✅</span>
-                                <span v-else class="status-pending">⏳</span>
+                            
+                            <!-- 视频列表 -->
+                            <div v-if="expandedChapters.includes(chapter.chapterId)" class="video-list">
+                                <div 
+                                    v-for="video in chapter.videos" 
+                                    :key="video.videoId"
+                                    :class="['video-item', { 
+                                        'active': currentVideo && currentVideo.videoId === video.videoId 
+                                    }]"
+                                    @click="selectVideo(chapter, video)"
+                                >
+                                    <div class="video-icon">🎥</div>
+                                    <div class="video-info">
+                                        <div class="video-title">{{ video.videoTitle }}</div>
+                                        <div class="video-duration">{{ video.duration || '未知时长' }}</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -126,7 +153,7 @@
         </div>
 
         <!-- 底部：学习工具 -->
-        <div class="learning-tools">
+        <div class="learning-tools" v-if="!loading && !error">
             <div class="tool-item">
                 <span class="tool-icon">📚</span>
                 <span class="tool-text">课程资料</span>
@@ -148,9 +175,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import axios from 'axios';
+import { getCourseDetail } from '@/api/index.js';
 
 const router = useRouter();
 const route = useRoute();
@@ -163,186 +190,107 @@ const goBack = () => {
 
 // 课程数据
 const course = reactive({
-    id: null,
-    title: '',
+    courseId: null,
+    courseName: '',
     description: '',
     teacher: '',
-    duration: '',
-    studentCount: 0,
-    rating: 0,
-    progress: 0,
-    category: '',
+    coverUrl: '',
+    createTime: '',
+    updateTime: '',
     status: ''
 });
+
+// 章节数据
+const chapters = ref([]);
+
+// 当前选中的章节和视频
+const currentChapter = ref(null);
+const currentVideo = ref(null);
+
+// 展开的章节
+const expandedChapters = ref([]);
 
 // 加载状态
 const loading = ref(true);
 const error = ref(null);
 
-// 模拟课程数据库
-const mockCourses = {
-    1: {
-        id: 1,
-        courseName: 'Vue.js 前端开发实战课程',
-        description: '从零开始学习Vue.js，掌握现代前端开发技术，构建响应式用户界面',
-        teacher: '张老师',
-        duration: '20小时',
-        studentCount: 1250,
-        rating: 4.8,
-        progress: 35,
-        category: '前端开发',
-        status: 'published'
-    },
-    2: {
-        id: 2,
-        courseName: 'React 进阶开发课程',
-        description: '深入学习React生态系统，包括Hooks、Context、Redux等高级特性',
-        teacher: '李老师',
-        duration: '25小时',
-        studentCount: 980,
-        rating: 4.9,
-        progress: 0,
-        category: '前端开发',
-        status: 'published'
-    },
-    3: {
-        id: 3,
-        courseName: 'Node.js 后端开发',
-        description: '全面掌握Node.js后端开发，包括Express、数据库操作、API设计等',
-        teacher: '王老师',
-        duration: '30小时',
-        studentCount: 756,
-        rating: 4.7,
-        progress: 0,
-        category: '后端开发',
-        status: 'published'
-    },
-    4: {
-        id: 4,
-        courseName: 'Python 数据分析',
-        description: '使用Python进行数据分析，包括Pandas、NumPy、Matplotlib等工具',
-        teacher: '陈老师',
-        duration: '18小时',
-        studentCount: 643,
-        rating: 4.6,
-        progress: 0,
-        category: '数据科学',
-        status: 'published'
-    }
+// 格式化日期
+const formatDate = (dateString) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleDateString('zh-CN');
 };
 
-// 获取课程信息
-const fetchCourseInfo = async (courseId) => {
+// 获取状态文本
+const getStatusText = (status) => {
+    const statusMap = {
+        'published': '已发布',
+        'draft': '草稿',
+        'archived': '下架'
+    };
+    return statusMap[status] || '未知';
+};
+
+// 获取课程详情
+const fetchCourseDetail = async (courseId) => {
     loading.value = true;
     error.value = null;
     
     try {
-        // 尝试从API获取课程信息
-        const response = await axios.get(`/api/courses/getCourse/${courseId}`);
+        const response = await getCourseDetail(courseId);
+        
         if (response.data && response.data.success) {
-            const courseData = response.data.data;
-            Object.assign(course, {
-                id: courseData.courseId,
-                title: courseData.courseName,
-                description: courseData.description,
-                teacher: courseData.teacher,
-                duration: courseData.duration,
-                studentCount: courseData.studentCount || 0,
-                rating: courseData.rating || 0,
-                progress: courseData.progress || 0,
-                category: courseData.category,
-                status: courseData.status
-            });
+            const { course: courseInfo, chapters: chapterList } = response.data;
+            
+            // 更新课程信息
+            Object.assign(course, courseInfo);
+            
+            // 更新章节信息
+            chapters.value = chapterList || [];
+            
+            // 默认展开第一个章节并选择第一个视频
+            if (chapters.value.length > 0) {
+                const firstChapter = chapters.value[0];
+                expandedChapters.value.push(firstChapter.chapterId);
+                currentChapter.value = firstChapter;
+                
+                if (firstChapter.videos && firstChapter.videos.length > 0) {
+                    currentVideo.value = firstChapter.videos[0];
+                }
+            }
+            
+        } else {
+            error.value = response.data.message || '获取课程详情失败';
         }
     } catch (apiError) {
-        console.log('API调用失败，使用模拟数据:', apiError);
-        // 如果API调用失败，使用模拟数据
-        const mockCourse = mockCourses[courseId];
-        if (mockCourse) {
-            Object.assign(course, {
-                id: mockCourse.id,
-                title: mockCourse.courseName,
-                description: mockCourse.description,
-                teacher: mockCourse.teacher,
-                duration: mockCourse.duration,
-                studentCount: mockCourse.studentCount,
-                rating: mockCourse.rating,
-                progress: mockCourse.progress,
-                category: mockCourse.category,
-                status: mockCourse.status
-            });
-        } else {
-            error.value = '课程不存在';
-        }
+        console.log('API调用失败:', apiError);
+        error.value = '网络错误，请稍后重试';
     } finally {
         loading.value = false;
     }
 };
 
-// 当前章节
-const currentChapter = ref({
-    id: 2,
-    title: 'Vue.js 基础语法',
-    description: '学习Vue.js的核心概念，包括模板语法、数据绑定、事件处理等基础知识'
-});
-
-// 章节列表
-const chapters = ref([
-    {
-        id: 1,
-        title: '课程介绍与环境搭建',
-        duration: '15分钟',
-        completed: true
-    },
-    {
-        id: 2,
-        title: 'Vue.js 基础语法',
-        duration: '45分钟',
-        completed: false
-    },
-    {
-        id: 3,
-        title: '组件化开发',
-        duration: '60分钟',
-        completed: false
-    },
-    {
-        id: 4,
-        title: '路由管理',
-        duration: '40分钟',
-        completed: false
-    },
-    {
-        id: 5,
-        title: '状态管理',
-        duration: '50分钟',
-        completed: false
-    },
-    {
-        id: 6,
-        title: '项目实战',
-        duration: '120分钟',
-        completed: false
+// 切换章节展开/收起
+const toggleChapter = (chapter) => {
+    const index = expandedChapters.value.indexOf(chapter.chapterId);
+    if (index > -1) {
+        expandedChapters.value.splice(index, 1);
+    } else {
+        expandedChapters.value.push(chapter.chapterId);
     }
-]);
+};
 
-// 计算已完成章节数
-const completedChapters = computed(() => {
-    return chapters.value.filter(chapter => chapter.completed).length;
-});
-
-// 选择章节
-const selectChapter = (chapter) => {
+// 选择视频
+const selectVideo = (chapter, video) => {
     currentChapter.value = chapter;
-    // 这里可以添加视频切换逻辑
-    console.log('切换到章节:', chapter.title);
+    currentVideo.value = video;
+    console.log('切换到视频:', video.videoTitle);
 };
 
 // 组件挂载时获取课程信息
 onMounted(() => {
     const courseId = route.params.id;
     if (courseId) {
-        fetchCourseInfo(courseId);
+        fetchCourseDetail(courseId);
     } else {
         error.value = '课程ID无效';
         loading.value = false;
@@ -563,6 +511,20 @@ onMounted(() => {
     margin-bottom: 15px;
 }
 
+.video-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.video-element {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
 .current-chapter {
     padding: 25px;
 }
@@ -614,90 +576,100 @@ onMounted(() => {
 }
 
 /* 右侧面板 */
-.side-panel {
+.sidebar {
     display: flex;
     flex-direction: column;
     gap: 20px;
 }
 
-.progress-card, .chapter-list-card {
+.course-info-card {
+    display: flex;
+    align-items: center;
+    gap: 20px;
     background: white;
     border-radius: 12px;
     padding: 20px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
-.progress-card h4, .chapter-list-card h4 {
+.course-cover {
+    width: 100px;
+    height: 100px;
+    border-radius: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.course-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.default-cover {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #e0e7ff;
+    color: #4f46e5;
+    font-size: 2.5rem;
+}
+
+.course-details {
+    flex: 1;
+}
+
+.course-details h3 {
+    margin: 0 0 5px 0;
+    color: #1e293b;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.course-details p {
+    color: #64748b;
+    font-size: 0.9rem;
+    margin: 0 0 10px 0;
+    line-height: 1.5;
+}
+
+.course-stats {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.stat-label {
+    color: #64748b;
+    font-size: 0.8rem;
+}
+
+.stat-value {
+    color: #1e293b;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.chapter-list-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.chapter-list-card h4 {
     margin: 0 0 15px 0;
     color: #1e293b;
     font-size: 1.1rem;
     font-weight: 600;
-}
-
-.progress-info {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-}
-
-.progress-circle {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    background: conic-gradient(#3b82f6 0deg, #3b82f6 126deg, #e5e7eb 126deg, #e5e7eb 360deg);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-}
-
-.progress-circle::before {
-    content: '';
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    background: white;
-    position: absolute;
-}
-
-.progress-text {
-    text-align: center;
-    z-index: 1;
-}
-
-.percentage {
-    display: block;
-    font-size: 1.2rem;
-    font-weight: 600;
-    color: #1e293b;
-}
-
-.label {
-    display: block;
-    font-size: 0.75rem;
-    color: #64748b;
-}
-
-.progress-stats {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.stat-item {
-    text-align: center;
-}
-
-.stat-number {
-    display: block;
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: #1e293b;
-}
-
-.stat-label {
-    font-size: 0.8rem;
-    color: #64748b;
 }
 
 /* 章节列表 */
@@ -724,8 +696,7 @@ onMounted(() => {
     cursor: pointer;
     transition: background 0.3s;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
     border-radius: 6px;
     margin-bottom: 5px;
 }
@@ -739,8 +710,16 @@ onMounted(() => {
     border-left: 3px solid #3b82f6;
 }
 
-.chapter-item.completed {
-    background: #f0fdf4;
+.chapter-item.expanded {
+    background: #f8fafc;
+}
+
+.chapter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    cursor: pointer;
 }
 
 .chapter-info {
@@ -768,7 +747,7 @@ onMounted(() => {
     color: white;
 }
 
-.chapter-item.completed .chapter-number {
+.chapter-item.expanded .chapter-number {
     background: #10b981;
     color: white;
 }
@@ -786,16 +765,56 @@ onMounted(() => {
     font-size: 0.8rem;
 }
 
-.chapter-status {
+.chapter-toggle {
     font-size: 1rem;
+    color: #64748b;
 }
 
-.status-completed {
-    color: #10b981;
+.video-list {
+    padding-left: 20px;
+    margin-top: 10px;
 }
 
-.status-pending {
-    color: #f59e0b;
+.video-item {
+    padding: 12px 15px;
+    border-bottom: 1px solid #f1f5f9;
+    cursor: pointer;
+    transition: background 0.3s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-radius: 6px;
+    margin-bottom: 5px;
+}
+
+.video-item:hover {
+    background: #f8fafc;
+}
+
+.video-item.active {
+    background: #dbeafe;
+    border-left: 3px solid #3b82f6;
+}
+
+.video-icon {
+    font-size: 1.2rem;
+    color: #3b82f6;
+}
+
+.video-info {
+    flex: 1;
+}
+
+.video-title {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #1e293b;
+    margin-bottom: 3px;
+}
+
+.video-duration {
+    font-size: 0.75rem;
+    color: #64748b;
 }
 
 /* 学习工具 */

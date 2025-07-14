@@ -16,7 +16,7 @@
                     </svg>
                 </div>
                 <div class="stat-content">
-                    <div class="stat-value">1,234</div>
+                    <div class="stat-value">{{ stats.users.toLocaleString() }}</div>
                     <div class="stat-label">学员总数</div>
                     <div class="stat-change positive">+12.5%</div>
                 </div>
@@ -30,7 +30,7 @@
                     </svg>
                 </div>
                 <div class="stat-content">
-                    <div class="stat-value">156</div>
+                    <div class="stat-value">{{ stats.courses }}</div>
                     <div class="stat-label">课程数量</div>
                     <div class="stat-change positive">+8.2%</div>
                 </div>
@@ -43,7 +43,7 @@
                     </svg>
                 </div>
                 <div class="stat-content">
-                    <div class="stat-value">24</div>
+                    <div class="stat-value">{{ stats.departments }}</div>
                     <div class="stat-label">班级数量</div>
                     <div class="stat-change positive">+3.1%</div>
                 </div>
@@ -56,7 +56,7 @@
                     </svg>
                 </div>
                 <div class="stat-content">
-                    <div class="stat-value">89%</div>
+                    <div class="stat-value">{{ stats.activity }}%</div>
                     <div class="stat-label">活跃度</div>
                     <div class="stat-change positive">+5.3%</div>
                 </div>

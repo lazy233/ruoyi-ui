@@ -390,9 +390,9 @@ const handlePageChange = (page) => {
 
 // 查看课程
 const viewCourse = (course) => {
-    // 跳转到课程详情页面
+    // 跳转到课程学习页面
     console.log('查看课程:', course);
-    router.push(`/course/${course.courseId}`);
+    router.push(`/course-learning/${course.courseId}`);
 };
 
 // 编辑课程
