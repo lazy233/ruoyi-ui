@@ -103,6 +103,12 @@
                                             <path d="M18.5 2.50001C18.8978 2.10219 19.4374 1.87869 20 1.87869C20.5626 1.87869 21.1022 2.10219 21.5 2.50001C21.8978 2.89784 22.1213 3.4374 22.1213 4.00001C22.1213 4.56262 21.8978 5.10219 21.5 5.50001L12 15L8 16L9 12L18.5 2.50001Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                         </svg>
                                     </button>
+                                    <button class="btn btn-sm btn-info" @click="viewVideoStatus(course)" title="视频状态">
+                                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <polygon points="23 7 16 12 23 17 23 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                            <rect x="1" y="5" width="15" height="14" rx="2" ry="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                    </button>
                                     <button class="btn btn-sm btn-danger" @click="deleteCourse(course.courseId)" title="删除">
                                         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                             <path d="M3 6H5H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -423,11 +429,101 @@
 
         <!-- 隐藏的文件输入 -->
         <input ref="videoInput" type="file" accept="video/*" @change="handleVideoChange" style="display: none">
+
+        <!-- 视频状态模态框 -->
+        <div v-if="showVideoStatusModal" class="modal-overlay" @click="closeVideoStatusModal">
+            <div class="modal-content video-status-modal" @click.stop>
+                <div class="modal-header">
+                    <h3>{{ currentCourse?.courseName }} - 视频状态</h3>
+                    <button class="modal-close" @click="closeVideoStatusModal">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                <div class="modal-body">
+                    <div v-if="loadingVideoStatus" class="loading-state">
+                        <div class="loading-spinner"></div>
+                        <span>加载视频状态中...</span>
+                    </div>
+                    
+                    <div v-else-if="!videoStatusList || videoStatusList.length === 0" class="empty-video-state">
+                        <div class="empty-icon">📹</div>
+                        <p>该课程暂无视频</p>
+                    </div>
+                    
+                    <div v-else class="video-status-list">
+                        <!-- 整体状态概览 -->
+                        <div class="overall-status">
+                            <div class="status-summary">
+                                <h4>处理概览</h4>
+                                <div class="progress-info">
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" :style="{ width: overallProgress + '%' }"></div>
+                                    </div>
+                                    <span class="progress-text">{{ overallProgress }}% 完成</span>
+                                </div>
+                                <p class="status-message" :style="{ color: overallStatusInfo.color }">
+                                    {{ overallStatusInfo.icon }} {{ overallStatusInfo.message }}
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <!-- 视频列表 -->
+                        <div class="video-list">
+                            <div v-for="video in videoStatusList" :key="video.videoId" class="video-item">
+                                <div class="video-info">
+                                    <div class="video-title">{{ video.videoTitle }}</div>
+                                    <div class="video-chapter">{{ video.chapterTitle }}</div>
+                                </div>
+                                
+                                <div class="video-status">
+                                    <div class="status-display" 
+                                         :style="{ color: getVideoStatusDisplay(video).color }">
+                                        <span class="status-icon">{{ getVideoStatusDisplay(video).icon }}</span>
+                                        <span class="status-text">{{ getVideoStatusDisplay(video).text }}</span>
+                                    </div>
+                                    
+                                    <div class="video-meta">
+                                        <div class="time-info">
+                                            <small>上传: {{ formatTime(video.uploadTime) }}</small>
+                                            <small>更新: {{ formatTime(video.updateTime) }}</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="video-actions">
+                                    <button v-if="getVideoStatusDisplay(video).canPlay" 
+                                            class="btn btn-sm btn-success"
+                                            @click="playVideo(video)">
+                                        播放
+                                    </button>
+                                    <button v-if="getVideoStatusDisplay(video).needRetry" 
+                                            class="btn btn-sm btn-warning"
+                                            @click="retryVideo(video)">
+                                        重试
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="closeVideoStatusModal">关闭</button>
+                    <button class="btn btn-primary" @click="refreshVideoStatus" :disabled="loadingVideoStatus">
+                        <span v-if="loadingVideoStatus">刷新中...</span>
+                        <span v-else>刷新状态</span>
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import axios from 'axios';
 
@@ -712,9 +808,17 @@ const createCourse = async () => {
         });
         
         if (response.data.success) {
-            alert('课程创建成功！');
+            alert('课程创建成功，视频正在后台处理中...');
+            const courseId = response.data.data?.courseId;
             closeCreateWizard();
             fetchCourseList();
+            
+            // 开始轮询视频状态
+            if (courseId) {
+                setTimeout(() => {
+                    startVideoStatusPolling(courseId);
+                }, 2000); // 2秒后开始检查
+            }
         } else {
             alert('创建失败：' + (response.data.message || '未知错误'));
         }
@@ -845,9 +949,311 @@ const deleteCourse = async (courseId) => {
     }
 };
 
+// 视频状态相关
+const showVideoStatusModal = ref(false);
+const currentCourse = ref(null);
+const videoStatusList = ref([]);
+const loadingVideoStatus = ref(false);
+
+// 视频状态轮询相关
+const pollingIntervals = ref(new Map()); // 存储每个课程的轮询定时器
+
+// 查询课程视频状态
+const fetchVideoStatus = async (courseId) => {
+    try {
+        const response = await axios.get(`/api/videos/status/${courseId}`);
+        
+        if (!response.data.success) {
+            throw new Error(response.data.message || '查询失败');
+        }
+        
+        return response.data.data;
+    } catch (error) {
+        console.error('查询视频状态失败:', error);
+        
+        // 根据错误类型提供不同的用户提示
+        if (error.name === 'TypeError') {
+            console.warn('网络连接失败，请检查网络状态');
+        } else {
+            console.warn(`查询失败: ${error.message}`);
+        }
+        
+        return null;
+    }
+};
+
+// 查询单个视频状态
+// eslint-disable-next-line no-unused-vars
+const fetchSingleVideoStatus = async (videoId) => {
+    try {
+        const response = await axios.get(`/api/videos/status/single/${videoId}`);
+        
+        if (!response.data.success) {
+            throw new Error(response.data.message || '查询失败');
+        }
+        
+        return response.data.data;
+    } catch (error) {
+        console.error('查询单个视频状态失败:', error);
+        return null;
+    }
+};
+
+// 获取视频状态显示信息
+const getVideoStatusDisplay = (video) => {
+    switch (video.uploadStatus) {
+        case 'PENDING':
+            return {
+                icon: '⏳',
+                text: '等待处理',
+                color: '#f39c12',
+                canPlay: false
+            };
+        case 'PROCESSING':
+            return {
+                icon: '🔄',
+                text: '正在处理...',
+                color: '#3498db',
+                canPlay: false
+            };
+        case 'SUCCESS':
+            return {
+                icon: '✅',
+                text: '上传成功',
+                color: '#27ae60',
+                canPlay: true,
+                playUrl: video.videoUrl
+            };
+        case 'FAILED':
+            return {
+                icon: '❌',
+                text: '上传失败',
+                color: '#e74c3c',
+                canPlay: false,
+                needRetry: true
+            };
+        default:
+            return {
+                icon: '❓',
+                text: '未知状态',
+                color: '#95a5a6',
+                canPlay: false
+            };
+    }
+};
+
+// 获取课程整体状态
+const getOverallStatus = (videos) => {
+    if (!videos || videos.length === 0) {
+        return { status: 'empty', message: '暂无视频' };
+    }
+    
+    const statusCount = videos.reduce((count, video) => {
+        count[video.uploadStatus] = (count[video.uploadStatus] || 0) + 1;
+        return count;
+    }, {});
+    
+    if (statusCount.FAILED > 0) {
+        return { 
+            status: 'has_failed', 
+            message: `${statusCount.FAILED} 个视频上传失败` 
+        };
+    }
+    
+    if (statusCount.PROCESSING > 0 || statusCount.PENDING > 0) {
+        const processing = (statusCount.PROCESSING || 0) + (statusCount.PENDING || 0);
+        return { 
+            status: 'processing', 
+            message: `${processing} 个视频正在处理中` 
+        };
+    }
+    
+    return { 
+        status: 'all_success', 
+        message: '所有视频处理完成' 
+    };
+};
+
+// 计算处理进度
+const calculateProgress = (videos) => {
+    if (!videos || videos.length === 0) return 0;
+    
+    const completed = videos.filter(v => 
+        v.uploadStatus === 'SUCCESS' || v.uploadStatus === 'FAILED'
+    ).length;
+    
+    return Math.round((completed / videos.length) * 100);
+};
+
+// 开始视频状态轮询
+const startVideoStatusPolling = (courseId) => {
+    // 如果已经在轮询，先清除
+    if (pollingIntervals.value.has(courseId)) {
+        clearInterval(pollingIntervals.value.get(courseId));
+    }
+    
+    const pollFunction = async () => {
+        const videos = await fetchVideoStatus(courseId);
+        
+        if (videos) {
+            // 检查是否全部完成
+            const allDone = videos.every(v => 
+                v.uploadStatus === 'SUCCESS' || v.uploadStatus === 'FAILED'
+            );
+            
+            if (allDone) {
+                clearInterval(pollingIntervals.value.get(courseId));
+                pollingIntervals.value.delete(courseId);
+                console.log(`课程 ${courseId} 所有视频处理完成`);
+                
+                // 可以在这里添加成功通知
+                const overallStatus = getOverallStatus(videos);
+                console.log(overallStatus.message);
+            } else {
+                const progress = calculateProgress(videos);
+                console.log(`课程 ${courseId} 视频处理进度: ${progress}%`);
+            }
+        }
+    };
+    
+    // 立即执行一次
+    pollFunction();
+    
+    // 每3秒查询一次
+    const interval = setInterval(pollFunction, 3000);
+    pollingIntervals.value.set(courseId, interval);
+    
+    // 设置最大轮询时间（10分钟）
+    setTimeout(() => {
+        if (pollingIntervals.value.has(courseId)) {
+            clearInterval(pollingIntervals.value.get(courseId));
+            pollingIntervals.value.delete(courseId);
+            console.log(`课程 ${courseId} 轮询超时，停止检查`);
+        }
+    }, 10 * 60 * 1000); // 10分钟
+};
+
+// 停止视频状态轮询
+// eslint-disable-next-line no-unused-vars
+const stopVideoStatusPolling = (courseId) => {
+    if (pollingIntervals.value.has(courseId)) {
+        clearInterval(pollingIntervals.value.get(courseId));
+        pollingIntervals.value.delete(courseId);
+    }
+};
+
+// 清理所有轮询
+const clearAllPolling = () => {
+    pollingIntervals.value.forEach((interval) => {
+        clearInterval(interval);
+    });
+    pollingIntervals.value.clear();
+};
+
+// 格式化时间
+const formatTime = (timeString) => {
+    if (!timeString) return '';
+    
+    const date = new Date(timeString);
+    return date.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+};
+
+// 获取完整视频URL
+const getFullVideoUrl = (videoUrl) => {
+    if (!videoUrl || videoUrl === '') {
+        return null; // 视频未上传完成
+    }
+    
+    // 如果是相对路径，转换为完整URL
+    if (videoUrl.startsWith('/api/uploads/')) {
+        return `${window.location.origin}${videoUrl}`;
+    }
+    
+    return videoUrl;
+};
+
+// 视频状态模态框相关计算属性
+const overallProgress = computed(() => {
+    return calculateProgress(videoStatusList.value);
+});
+
+const overallStatusInfo = computed(() => {
+    const status = getOverallStatus(videoStatusList.value);
+    const statusDisplay = {
+        empty: { icon: '📹', message: '暂无视频', color: '#95a5a6' },
+        has_failed: { icon: '❌', message: status.message, color: '#e74c3c' },
+        processing: { icon: '🔄', message: status.message, color: '#3498db' },
+        all_success: { icon: '✅', message: status.message, color: '#27ae60' }
+    };
+    return statusDisplay[status.status] || statusDisplay.empty;
+});
+
+// 视频状态模态框方法
+const viewVideoStatus = async (course) => {
+    currentCourse.value = course;
+    showVideoStatusModal.value = true;
+    loadingVideoStatus.value = true;
+    
+    try {
+        const videos = await fetchVideoStatus(course.courseId);
+        videoStatusList.value = videos || [];
+    } catch (error) {
+        console.error('加载视频状态失败:', error);
+        videoStatusList.value = [];
+    } finally {
+        loadingVideoStatus.value = false;
+    }
+};
+
+const closeVideoStatusModal = () => {
+    showVideoStatusModal.value = false;
+    currentCourse.value = null;
+    videoStatusList.value = [];
+};
+
+const refreshVideoStatus = async () => {
+    if (!currentCourse.value) return;
+    
+    loadingVideoStatus.value = true;
+    try {
+        const videos = await fetchVideoStatus(currentCourse.value.courseId);
+        videoStatusList.value = videos || [];
+    } catch (error) {
+        console.error('刷新视频状态失败:', error);
+    } finally {
+        loadingVideoStatus.value = false;
+    }
+};
+
+const playVideo = (video) => {
+    const videoUrl = getFullVideoUrl(video.videoUrl);
+    if (videoUrl) {
+        // 这里可以打开视频播放器或跳转到播放页面
+        window.open(videoUrl, '_blank');
+    }
+};
+
+const retryVideo = (video) => {
+    // 重试视频上传的逻辑，这里可以调用重新上传的API
+    alert(`重试上传视频: ${video.videoTitle}`);
+    // TODO: 实现重试逻辑
+};
+
 // 组件挂载时获取数据
 onMounted(() => {
     fetchCourseList();
+});
+
+// 组件卸载时清理轮询
+onUnmounted(() => {
+    clearAllPolling();
 });
 </script>
 
@@ -1967,6 +2373,225 @@ onMounted(() => {
         .wizard-content,
         .wizard-footer {
             padding: 16px;
+        }
+    }
+
+    /* 视频状态模态框样式 */
+    .video-status-modal {
+        max-width: 800px;
+        width: 90vw;
+        max-height: 80vh;
+        overflow-y: auto;
+    }
+
+    .overall-status {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+
+    .status-summary h4 {
+        margin: 0 0 15px 0;
+        color: #1e293b;
+        font-size: 16px;
+        font-weight: 600;
+    }
+
+    .progress-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+    .progress-bar {
+        flex: 1;
+        height: 8px;
+        background: #e2e8f0;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+        transition: width 0.3s ease;
+    }
+
+    .progress-text {
+        font-size: 14px;
+        font-weight: 500;
+        color: #64748b;
+        min-width: 60px;
+    }
+
+    .status-message {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .video-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .video-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+    }
+
+    .video-item:hover {
+        border-color: #cbd5e1;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .video-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .video-title {
+        font-size: 14px;
+        font-weight: 500;
+        color: #1e293b;
+        margin-bottom: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .video-chapter {
+        font-size: 12px;
+        color: #64748b;
+    }
+
+    .video-status {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        margin: 0 20px;
+    }
+
+    .status-display {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .status-icon {
+        font-size: 16px;
+    }
+
+    .video-meta {
+        text-align: center;
+    }
+
+    .time-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .time-info small {
+        font-size: 11px;
+        color: #94a3b8;
+    }
+
+    .video-actions {
+        display: flex;
+        gap: 8px;
+    }
+
+    .empty-video-state {
+        text-align: center;
+        padding: 40px 20px;
+        color: #64748b;
+    }
+
+    .empty-icon {
+        font-size: 48px;
+        margin-bottom: 16px;
+    }
+
+    .loading-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 40px 20px;
+        color: #64748b;
+    }
+
+    .loading-spinner {
+        width: 32px;
+        height: 32px;
+        border: 3px solid #e2e8f0;
+        border-top: 3px solid #3b82f6;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-bottom: 16px;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    /* 按钮样式增强 */
+    .btn-info {
+        background: #06b6d4;
+        color: white;
+        border: 1px solid #0891b2;
+    }
+
+    .btn-info:hover {
+        background: #0891b2;
+        border-color: #0e7490;
+    }
+
+    /* 响应式设计 */
+    @media (max-width: 768px) {
+        .video-status-modal {
+            width: 95vw;
+            max-height: 90vh;
+        }
+
+        .video-item {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 12px;
+        }
+
+        .video-status {
+            margin: 0;
+            align-items: stretch;
+        }
+
+        .status-display {
+            justify-content: center;
+        }
+
+        .video-actions {
+            justify-content: center;
+        }
+
+        .progress-info {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 8px;
         }
     }
 </style> 
